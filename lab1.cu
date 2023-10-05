@@ -1,15 +1,16 @@
+%%writefile lab1.cu
 #include <cuda_runtime.h>
 #include <curand_kernel.h>
+#include <cmath>
 
 extern "C" {
 
 #include <stdio.h>
 
-
-__host__ void h_compute_distance(float* a, float* b, float* c, int n) {
+__host__ void h_compute_distance(float *a, float *b, float *c, int n) {
     for (int i = 0; i < n; i++) {
         float diff = a[i] - b[i];
-        c[i] = diff * diff; // Квадрат разницы
+        c[i] = diff * diff;
     }
 }
 
@@ -18,10 +19,9 @@ __global__ void d_compute_distance(float *a, float *b, float *c, int n) {
 
     if (i < n) {
         float diff = a[i] - b[i];
-        c[i] = diff * diff; // Квадрат разницы
+        c[i] = diff * diff;
     }
 }
-
 
 __global__ void d_fill_uniform(
     float *a, float *b, int n, float r, unsigned long long seed) {
@@ -37,6 +37,15 @@ __global__ void d_fill_uniform(
     }
 }
 
+//добавил функцию
+float distance(float *a, float *b, int n) {
+    float sum = 0.0f;
+    for (int i = 0; i < n; i++) {
+        float diff = a[i] - b[i];
+        sum += diff * diff;
+    }
+    return sqrtf(sum);
+}
 
 float compare(float *a, float *b, int n, float eps) {
     float diff = 0;
@@ -68,7 +77,6 @@ float compare(float *a, float *b, int n, float eps) {
 #define ts_to_ms(ts) (ts.tv_sec * 10e3 + ts.tv_nsec * 10e-6)
 #define calc_grid_size(m) ((m + BLOCK_SIZE - 1) / BLOCK_SIZE)
 
-
 int main() {
     float *h_a __attribute__ ((aligned (64)));
     float *h_b __attribute__ ((aligned (64)));
@@ -85,8 +93,7 @@ int main() {
     cudaMalloc((void**)&d_b, VEC_MEM_SIZE);
     cudaMalloc((void**)&d_c, VEC_MEM_SIZE);
 
-    d_fill_uniform<<<calc_grid_size(VEC_LEN), BLOCK_SIZE>>>(
-        d_a, d_b, VEC_LEN, VEC_MAX_ABS_VAL, SEED);
+    d_fill_uniform<<<calc_grid_size(VEC_LEN), BLOCK_SIZE>>>(d_a, d_b, VEC_LEN, VEC_MAX_ABS_VAL, SEED);
     cudaMemcpy(h_a, d_a, VEC_MEM_SIZE, cudaMemcpyDeviceToHost);
     cudaMemcpy(h_b, d_b, VEC_MEM_SIZE, cudaMemcpyDeviceToHost);
 
@@ -108,11 +115,12 @@ int main() {
     cudaEventCreate(&d_stop);
 
     FILE* file = fopen(FNAME_STAMPS, "w");
-    fprintf(file, "Vector Length, CPU Time, GPU Time\n");
+    fprintf(file, "Vector Length, CPU Time, GPU Time, CPU Distance\n");
 
     for (int m = VEC_LEN_INC; m <= VEC_LEN; m += VEC_LEN_INC) {
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &h_start);
         h_compute_distance(h_a, h_b, h_c, m);
+        float h_result = distance(h_a, h_b, m);
         clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &h_stop);
         h_time = (ts_to_ms(h_stop) - ts_to_ms(h_start)); // time in ms
 
@@ -122,7 +130,7 @@ int main() {
         cudaEventSynchronize(d_stop);
         cudaEventElapsedTime(&d_time, d_start, d_stop); // time in ms
 
-        fprintf(file, "%d, %f, %f\n", m, h_time, d_time);
+        fprintf(file, "%d, %f, %f, %f\n", m, h_time, d_time, h_result);
     }
 
     free(h_a);
@@ -138,4 +146,3 @@ int main() {
 
     return 0;
 }
-
